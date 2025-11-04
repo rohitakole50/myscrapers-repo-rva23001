@@ -3,29 +3,28 @@ name: Deploy Scraper (CF Gen2)
 on:
   push:
     branches: [ "main" ]
-    paths:
-      - 'cloud_function/scraper_cars/**'
 
 jobs:
   deploy:
     runs-on: ubuntu-latest
     permissions:
       contents: read
-      id-token: write  # needed for OIDC / WIF
+      id-token: write   # required for OIDC / WIF
 
     env:
       PROJECT_ID: craigslist-scraper-cars-v2
       REGION: us-central1
-      BUCKET_NAME: craigslist-data-cars-v2
-      FUNCTION_NAME: craigslist-scraper # edit in all yml!
+      FUNCTION_NAME: craigslist-scraper
       RUNTIME_SA: cf-runtime@craigslist-scraper-cars-v2.iam.gserviceaccount.com
+      BUCKET_NAME: craigslist-data-cars-v2
+      # Stored in repo/environment VARIABLES (not secrets)
       WORKLOAD_IDENTITY_PROVIDER: ${{ vars.WORKLOAD_IDENTITY_PROVIDER }}
       DEPLOYER_SA: ${{ vars.DEPLOYER_SA }}
 
     steps:
       - uses: actions/checkout@v4
 
-      - name: Auth via WIF
+      - name: Authenticate via WIF
         uses: google-github-actions/auth@v2
         with:
           workload_identity_provider: ${{ env.WORKLOAD_IDENTITY_PROVIDER }}
@@ -33,15 +32,18 @@ jobs:
           create_credentials_file: true
           export_environment_variables: true
 
-      - name: Set gcloud project
-        run: gcloud config set project $PROJECT_ID
+      - name: Setup gcloud
+        uses: google-github-actions/setup-gcloud@v2
 
-      - name: Deploy CF Gen2 (from cloud_function/)
-        working-directory: cloud_function/scraper_cars # update for each yml!
+      - name: Set gcloud project
+        run: gcloud config set project "$PROJECT_ID"
+
+      - name: Deploy CF Gen2
         run: |
           gcloud functions deploy "$FUNCTION_NAME" \
             --project="$PROJECT_ID" \
-            --gen2 --region="$REGION" \
+            --gen2 \
+            --region="$REGION" \
             --runtime=python312 \
             --entry-point=entrypoint \
             --trigger-http \
@@ -49,8 +51,8 @@ jobs:
             --service-account="$RUNTIME_SA" \
             --set-env-vars "PROJECT_ID=$PROJECT_ID,BUCKET_NAME=$BUCKET_NAME" \
             --memory=512Mi \
-            --source "."
+            --timeout=540s \
+            --source "cloud_function"
 
-      - name: Show URL
-        if: ${{ success() }}
+      - name: Show Function URL
         run: gcloud functions describe "$FUNCTION_NAME" --gen2 --region "$REGION" --format="value(serviceConfig.uri)"
