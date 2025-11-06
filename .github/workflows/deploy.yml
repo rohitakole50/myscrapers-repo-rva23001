@@ -3,6 +3,9 @@ name: Deploy Scraper (CF Gen2)
 on:
   push:
     branches: [ "main" ]
+  schedule:
+    - cron: "0 * * * *"    # run at the top of every hour (UTC)
+  workflow_dispatch:
 
 jobs:
   deploy:
@@ -19,6 +22,8 @@ jobs:
       BUCKET_NAME: ${{ vars.BUCKET_NAME }}
       WORKLOAD_IDENTITY_PROVIDER: ${{ vars.WORKLOAD_IDENTITY_PROVIDER }}
       DEPLOYER_SA: ${{ vars.DEPLOYER_SA }}
+      # Optional: payload used when the hourly schedule INVOKES the function
+      SCHEDULE_BODY: ${{ vars.SCHEDULE_BODY || '{"pages":1,"max":3}' }}
 
     steps:
       - uses: actions/checkout@v4
@@ -32,6 +37,7 @@ jobs:
           echo "BUCKET_NAME=$BUCKET_NAME"
           echo "WIF_PROVIDER=$WORKLOAD_IDENTITY_PROVIDER"
           echo "DEPLOYER_SA=$DEPLOYER_SA"
+          echo "SCHEDULE_BODY=$SCHEDULE_BODY"
 
       - name: Authenticate via WIF
         uses: google-github-actions/auth@v2
@@ -47,7 +53,9 @@ jobs:
       - name: Set gcloud project
         run: gcloud config set project "$PROJECT_ID"
 
+      # ------------------ DEPLOY on push / manual ------------------
       - name: Deploy CF Gen2 (from cloud_function/scraper_cars)
+        if: github.event_name != 'schedule'
         run: |
           gcloud functions deploy "$FUNCTION_NAME" \
             --project="$PROJECT_ID" \
@@ -64,4 +72,19 @@ jobs:
             --source "cloud_function/scraper_cars"
 
       - name: Show Function URL
+        if: github.event_name != 'schedule'
         run: gcloud functions describe "$FUNCTION_NAME" --gen2 --region "$REGION" --format="value(serviceConfig.uri)"
+
+      # ------------------ INVOKE hourly on schedule ------------------
+      - name: Invoke Function (hourly schedule)
+        if: github.event_name == 'schedule'
+        run: |
+          set -euo pipefail
+          URL="$(gcloud functions describe "$FUNCTION_NAME" --gen2 --region "$REGION" --format='value(serviceConfig.uri)')"
+          echo "Invoking $URL with payload: $SCHEDULE_BODY"
+          # OIDC token for secured HTTP trigger
+          TOKEN="$(gcloud auth print-identity-token --audiences="$URL")"
+          curl -i -sS -X POST "$URL" \
+            -H "Authorization: Bearer $TOKEN" \
+            -H "Content-Type: application/json" \
+            -d "$SCHEDULE_BODY"
