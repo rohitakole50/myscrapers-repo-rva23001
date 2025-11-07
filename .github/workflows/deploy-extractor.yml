@@ -1,7 +1,5 @@
 name: Deploy Extractor (CF Gen2 + Cloud Scheduler)
-# optional: a per-run title shown in the run list
 run-name: "Extractor deploy by ${{ github.actor }} • ${{ github.ref_name }}"
-
 
 on:
   push:
@@ -26,8 +24,9 @@ env:
   RUNTIME_SA: ${{ vars.RUNTIME_SA }}
   DEPLOYER_SA: ${{ vars.DEPLOYER_SA }}
   WORKLOAD_IDENTITY_PROVIDER: ${{ vars.WORKLOAD_IDENTITY_PROVIDER }}
-  SCHEDULE_BODY: ${{ vars.EXTRACTOR_BODY || '{"overwrite": true, "max_files": 0}' }}
-  CRON_EXPR: "10 * * * *"             # :10 every hour (ET below)
+  SCHEDULE_BODY: ${{ vars.EXTRACTOR_BODY || '{"overwrite":true, "max_files":0}'}}
+  CRON_EXPR: "10 * * * *"
+  # runs :10 past each hour (America/New_York set below on the job)
 
 jobs:
   deploy:
@@ -79,7 +78,7 @@ jobs:
           URL=$(gcloud functions describe "${FUNCTION_NAME}" --gen2 --region "${REGION}" --format='value(serviceConfig.uri)')
           echo "url=${URL}" >> "$GITHUB_OUTPUT"
 
-      - name: Ensure Scheduler API enabled (fail clearly if not)
+      - name: Ensure Scheduler API enabled
         run: |
           set -euo pipefail
           gcloud services list --enabled --filter="cloudscheduler.googleapis.com" --format="value(config.name)" | grep -q cloudscheduler.googleapis.com \
