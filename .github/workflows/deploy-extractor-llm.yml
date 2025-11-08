@@ -80,7 +80,7 @@ jobs:
             gcloud iam service-accounts describe "${RUNTIME_SA}" >/dev/null >&1
             SA_ARGS=(--service-account="${RUNTIME_SA}")
           fi
-
+          # Ensuring all flags are correctly separated by a backslash except the last one.
           gcloud functions deploy "${FUNCTION_NAME}" \
             --gen2 \
             --region="${REGION}" \
@@ -89,14 +89,13 @@ jobs:
             --entry-point="${ENTRY_POINT}" \
             --trigger-http \
             --no-allow-unauthenticated \
-            --memory=1024Mi \  # <-- Memory fix confirmed
-            "${SA_ARGS[@]}" 
+            --memory=1024Mi \
+            "${SA_ARGS[@]}" \
             --set-env-vars="PROJECT_ID=${PROJECT_ID},GCS_BUCKET=${BUCKET_NAME},STRUCTURED_PREFIX=${LLM_STRUCTURED_PREFIX},LLM_PROVIDER=${LLM_PROVIDER},LLM_MODEL=${LLM_MODEL},OVERWRITE=${LLM_OVERWRITE},MAX_FILES=${LLM_MAX_FILES}"
 
       - name: Get Function URL
         id: cfurl
         run: |
-          # Ensure --gen2 is used here for Gen2 functions
           URL=$(gcloud functions describe "${FUNCTION_NAME}" --gen2 --region "${REGION}" --format='value(serviceConfig.uri)') 
           echo "url=${URL}" >> "$GITHUB_OUTPUT"
 
