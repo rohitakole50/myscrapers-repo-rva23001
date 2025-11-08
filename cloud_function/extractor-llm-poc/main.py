@@ -3,11 +3,8 @@
 # fetches the original TXT, asks an LLM (Vertex AI) to extract fields, and writes
 # a sibling "<post_id>_llm.jsonl" to the NEW 'jsonl_llm/' sub-directory.
 #
-# Robustness changes:
-# 1. Caches the GenerativeModel object.
-# 2. Implements retry/exponential backoff for transient GCS and LLM API errors.
-# 3. FIX: Corrects prompt construction to eliminate AttributeError.
-# 4. NOTE: Uses gemini-2.5-flash by default for better memory performance.
+# FIX: The system instruction is now combined with the text prompt to avoid 
+# a GenerationConfig TypeError in certain SDK versions.
 
 import os
 import re
@@ -32,7 +29,7 @@ REGION             = os.getenv("REGION", "us-central1")
 BUCKET_NAME        = os.getenv("GCS_BUCKET", "")
 STRUCTURED_PREFIX  = os.getenv("STRUCTURED_PREFIX", "structured")
 LLM_PROVIDER       = os.getenv("LLM_PROVIDER", "vertex").lower()
-# Using gemini-2.5-flash as default to address potential memory issues
+# Using gemini-2.5-flash as default to address potential memory/performance issues
 LLM_MODEL          = os.getenv("LLM_MODEL", "gemini-2.5-flash") 
 OVERWRITE_DEFAULT  = os.getenv("OVERWRITE", "false").lower() == "true"
 MAX_FILES_DEFAULT  = int(os.getenv("MAX_FILES", "0") or 0)
@@ -174,6 +171,7 @@ def _vertex_extract_fields(raw_text: str) -> dict:
         "additionalProperties": False,
     }
 
+    # System instruction (will be prepended to the prompt)
     sys_instr = (
         "Extract ONLY the following fields from the input text. "
         "Return a strict JSON object that conforms to the provided schema. "
@@ -182,12 +180,11 @@ def _vertex_extract_fields(raw_text: str) -> dict:
         "do not infer values not explicitly present; do not add extra keys."
     )
 
-    # 💥 FIX: Prompt is now a simple string containing the text to be processed.
-    prompt = f"TEXT:\n{raw_text}"
+    # FIX: Combine instruction and text into one prompt string (SDK compatibility)
+    prompt = f"{sys_instr}\n\nTEXT:\n{raw_text}" 
 
     gen_cfg = GenerationConfig(
-        # System instruction is used here, separate from the prompt data (best practice)
-        system_instruction=sys_instr, 
+        # FIX: Removed system_instruction=sys_instr to fix TypeError 
         temperature=0.0,
         top_p=1.0,
         top_k=40,
@@ -201,7 +198,7 @@ def _vertex_extract_fields(raw_text: str) -> dict:
     resp = None
     for attempt in range(max_attempts):
         try:
-            # Pass the simple string prompt
+            # Pass the single string prompt
             resp = model.generate_content(prompt, generation_config=gen_cfg)
             break
         except Exception as e:
