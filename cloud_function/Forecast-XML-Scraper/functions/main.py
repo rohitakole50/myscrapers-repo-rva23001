@@ -21,7 +21,6 @@ CSV_PREFIX = os.getenv("CSV_PREFIX", "nws_flat/")
 LAT = float(os.getenv("LAT", "41.94"))
 LON = float(os.getenv("LON", "-72.685"))
 FCST_TYPE = os.getenv("FCST_TYPE", "digitalDWML")
-USER_AGENT = os.getenv("USER_AGENT", "")
 
 DWML_URL = (
     f"https://forecast.weather.gov/MapClick.php?"
@@ -34,8 +33,7 @@ pipe = Pipeline(
     raw_prefix=RAW_PREFIX,
     csv_prefix=CSV_PREFIX,
     lat=LAT, lon=LON,
-    fcst_url=DWML_URL,
-    user_agent=USER_AGENT
+    fcst_url=DWML_URL
 )
 
 @functions_framework.http
@@ -58,5 +56,6 @@ def scrape_dwml(request):
             energy_res = {"skipped": "no GCS_BUCKET configured"}
     except Exception as e:
         energy_res = {"error": str(e)}
+
 
     return {"dwml": result, "energy": energy_res}
