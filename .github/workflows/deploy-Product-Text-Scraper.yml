@@ -5,7 +5,7 @@ on:
     branches: [ main ]
     paths:
       - 'Product-Text-Scraper/functions/**'
-  workflow_dispatch:
+  workflow_dispatch: {}
 
 jobs:
   deploy:
@@ -140,4 +140,5 @@ jobs:
               --message-body='${{ env.SCHEDULE_BODY }}' \
               --oidc-service-account-email="${RUNTIME_SA}" \
               --oidc-token-audience="${URL}"
+
           fi
