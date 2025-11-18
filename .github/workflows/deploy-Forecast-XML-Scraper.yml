@@ -42,7 +42,36 @@ jobs:
   deploy:
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
+      - name: Checkout repository (allow retry fallback)
+        uses: actions/checkout@v4
+        # allow the job to continue so we can attempt an authenticated retry clone
+        continue-on-error: true
+
+      - name: Ensure repository present (retry clone fallback)
+        if: always()
+        shell: bash
+        run: |
+          set -euo pipefail
+          # If checkout succeeded there will be a .git directory
+          if [ -d ".git" ]; then
+            echo "actions/checkout successful"
+            exit 0
+          fi
+          echo "actions/checkout did not produce .git; attempting authenticated clone with retries"
+          # Retry a few times with increasing backoff. Use the default GITHUB_TOKEN for auth.
+          TRIES=0
+          until [ $TRIES -ge 5 ]
+          do
+            echo "Clone attempt $((TRIES+1))/5"
+            # Clean workspace (safe in runner); then clone into current directory
+            rm -rf ./* ./.git || true
+            git clone --depth=1 https://x-access-token:${{ secrets.GITHUB_TOKEN }}@github.com/${{ github.repository }}.git . && break
+            TRIES=$((TRIES+1))
+            sleep $((TRIES * 5))
+          done
+          if [ ! -d ".git" ]; then
+            echo "Failed to clone repository after retries"; ls -la; exit 1
+          fi
 
       - name: Auth (WIF)
         uses: google-github-actions/auth@v2
@@ -158,6 +187,7 @@ jobs:
               --oidc-token-audience="${URL}"
 
           fi
+
 
 
 
