@@ -4,7 +4,7 @@ on:
   push:
     branches: [ main ]
     paths:
-      - 'Product-Text-Scraper/functions/**'
+      - 'cloud_function/Product-Text-Scraper/functions/**'
   workflow_dispatch: {}
 
 permissions:
@@ -53,12 +53,12 @@ jobs:
         run: |
           set -euo pipefail
           # Ensure we're in the directory that contains main.py for Python functions
-          if [ -d "Product-Text-Scraper/functions" ]; then
-            cd Product-Text-Scraper/functions
+          if [ -d "cloud_function/Product-Text-Scraper/functions" ]; then
+            cd cloud_function/Product-Text-Scraper/functions
           elif [ -d "functions" ]; then
             cd functions
           else
-            echo "Directory not found: Product-Text-Scraper/functions or functions"
+            echo "Directory not found: cloud_function/Product-Text-Scraper/functions or functions"
             echo "Repository root contents:"
             ls -la
             exit 1
@@ -155,6 +155,7 @@ jobs:
               --oidc-token-audience="${URL}"
 
           fi
+
 
 
 
