@@ -97,6 +97,7 @@ jobs:
           add_secret ISO_NE_USER SECRET_ISO_USER
           add_secret ISO_NE_PASS SECRET_ISO_PASS
           IFS=, secrets_arg="${SECRETS[*]}"; unset IFS
+
           
           gcloud functions deploy "$FUNCTION_NAME" \
             --gen2 \
@@ -191,6 +192,7 @@ jobs:
               --oidc-token-audience="${URL}"
 
           fi
+
 
 
 
