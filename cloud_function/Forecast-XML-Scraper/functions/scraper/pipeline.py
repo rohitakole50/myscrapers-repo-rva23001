@@ -91,7 +91,8 @@ class Pipeline:
 
             # flatten
             try:
-                df = flatten_energy(resp.json(), stamp, location)
+                # pass raw text to flatten_energy; let it handle empty/invalid JSON
+                df = flatten_energy(resp.text, stamp, location)
                 logger.info("Flattened energy for %s: rows=%d", day_str, len(df))
             except Exception as e:
                 logger.exception("flatten_failed for %s", day_str)
@@ -127,4 +128,5 @@ class Pipeline:
             "per_day": day_results,
 
         }
+
 
