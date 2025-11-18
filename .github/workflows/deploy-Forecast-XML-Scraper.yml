@@ -24,7 +24,7 @@ env:
   LAT: '41.94'
   LON: '-72.685'
   FCST_TYPE: digitalDWML
-  SECRET_USER_AGENT: NWS_USER_AGENT:latest
+  SECRET_USER_AGENT: NWS_USER_AGENT
   # ISO-NE secret references (Secret Manager resource names, e.g. ISO_NE_USER:latest)
   SECRET_ISO_USER: ${{ vars.SECRET_ISO_USER }}
   SECRET_ISO_PASS: ${{ secrets.SECRET_ISO_PASS }}
@@ -191,6 +191,7 @@ jobs:
               --oidc-token-audience="${URL}"
 
           fi
+
 
 
 
