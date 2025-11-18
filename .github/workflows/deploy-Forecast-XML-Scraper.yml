@@ -24,7 +24,7 @@ env:
   LAT: '41.94'
   LON: '-72.685'
   FCST_TYPE: digitalDWML
-  SECRET_USER_AGENT: NWS_USER_AGENT
+  SECRET_USER_AGENT: NWS_USER_AGENT:latest
   # ISO-NE secret references (Secret Manager resource names, e.g. ISO_NE_USER:latest)
   SECRET_ISO_USER: ${{ vars.SECRET_ISO_USER }}
   SECRET_ISO_PASS: ${{ secrets.SECRET_ISO_PASS }}
@@ -58,6 +58,7 @@ jobs:
           project_id: ${{ env.PROJECT_ID }}
 
       - name: Deploy Cloud Function (Gen2)
+        working-directory: Forecast-XML-Scraper/functions
         run: |
           set -euo pipefail
           SA_ARGS=()
@@ -65,53 +66,20 @@ jobs:
             gcloud iam service-accounts describe "${RUNTIME_SA}" >/dev/null 2>&1
             SA_ARGS=(--service-account="${RUNTIME_SA}")
           fi
-            # Try to change into the functions directory; provide diagnostics if missing
-            if [ -d "cloud_function/Forecast-XML-Scraper/functions" ]; then
-              cd cloud_function/Forecast-XML-Scraper/functions
-            elif [ -d "functions" ]; then
-              cd functions
-            else
-              echo "Directory not found: cloud_function/Forecast-XML-Scraper/functions or functions"
-              echo "Repository root contents:"
-              ls -la
-              exit 1
-            fi
 
-          # Build --set-secrets argument robustly. Inputs may be:
-          # - a short secret name like SECRET_NAME (we expand to projects/$PROJECT_ID/secrets/SECRET_NAME:latest)
-          # - a name with version like SECRET_NAME:latest (passed as-is)
-          # - a full resource like projects/PROJECT/secrets/SECRET:latest (passed as-is)
-          SECRETS=()
-          add_secret() {
-            local fn_var="$1"; local secret_env_var="$2"; local val="${!secret_env_var:-}"
-            if [[ -z "$val" ]]; then return; fi
-            if [[ "$val" == projects/* || "$val" == *:* ]]; then
-              resource="$val"
-            else
-              resource="projects/${PROJECT_ID}/secrets/${val}:latest"
-            fi
-            SECRETS+=("${fn_var}=${resource}")
-          }
-
-          add_secret USER_AGENT SECRET_USER_AGENT
-          add_secret ISO_NE_USER SECRET_ISO_USER
-          add_secret ISO_NE_PASS SECRET_ISO_PASS
-          IFS=, secrets_arg="${SECRETS[*]}"; unset IFS
-
-          
           gcloud functions deploy "$FUNCTION_NAME" \
             --gen2 \
             --region="$REGION" \
             --runtime=python311 \
-            --source="$FUNCTION_DIR" \
+            --source="." \
             --entry-point=scrape_dwml \
             --trigger-http \
             --service-account="$RUNTIME_SA" \
             --no-allow-unauthenticated \
             --timeout=360s \
             --memory=1Gi \
-            --set-env-vars="PROJECT_ID=$PROJECT_ID,GCS_BUCKET=$BUCKET_NAME,RAW_PREFIX=$RAW_PREFIX,CSV_PREFIX=$CSV_PREFIX,LAT=$LAT,LON=$LON,FCST_TYPE=$FCST_TYPE,ENERGY_RAW_PREFIX=$ENERGY_RAW_PREFIX,ENERGY_CSV_PREFIX=$ENERGY_CSV_PREFIX,ENERGY_URL_BASE=$ENERGY_URL_BASE,ENERGY_START_DATE=$ENERGY_START_DATE,ENERGY_LOCATION=$ENERGY_LOCATION" \
-            --set-secrets="$secrets_arg"
+            --set-env-vars="PROJECT_ID=$PROJECT_ID,GCS_BUCKET=$BUCKET_NAME,RAW_PREFIX=$RAW_PREFIX,CSV_PREFIX=$CSV_PREFIX,LAT=$LAT,LON=$LON,FCST_TYPE=$FCST_TYPE,ENERGY_RAW_PREFIX=$ENERGY_RAW_PREFIX,ENERGY_CSV_PREFIX=$ENERGY_CSV_PREFIX,ENERGY_URL_BASE=$ENERGY_URL_BASE,ENERGY_START_DATE=$ENERGY_START_DATE,ENERGY_LOCATION=$ENERGY_LOCATION,ISO_NE_USER=$SECRET_ISO_USER,ISO_NE_PASS=$SECRET_ISO_PASS" \
+            --set-secrets="USER_AGENT=$SECRET_USER_AGENT"
 
       - name: Grant invoker to deployer & runtime SAs
         run: |
@@ -192,6 +160,7 @@ jobs:
               --oidc-token-audience="${URL}"
 
           fi
+
 
 
 
