@@ -58,7 +58,6 @@ jobs:
           project_id: ${{ env.PROJECT_ID }}
 
       - name: Deploy Cloud Function (Gen2)
-        working-directory: Forecast-XML-Scraper/functions
         run: |
           set -euo pipefail
           SA_ARGS=()
@@ -71,7 +70,7 @@ jobs:
             --gen2 \
             --region="$REGION" \
             --runtime=python311 \
-            --source="$FUNCTION_DIR" \
+            --source="." \
             --entry-point=scrape_dwml \
             --trigger-http \
             --service-account="$RUNTIME_SA" \
@@ -160,6 +159,7 @@ jobs:
               --oidc-token-audience="${URL}"
 
           fi
+
 
 
 
