@@ -17,7 +17,6 @@ env:
   PROJECT_NUMBER: ${{ vars.PROJECT_NUMBER }}
   FUNCTION_NAME: nws-scraper-fn
   FUNCTION_DIR: cloud_function/Forecast-XML-Scraper/functions
-  RUNTIME_SA: ${{ vars.RUNTIME_SA }}
   BUCKET_NAME: ${{ vars.BUCKET_NAME }}
   RAW_PREFIX: nws_raw/
   CSV_PREFIX: nws_flat/
@@ -35,6 +34,8 @@ env:
   ENERGY_LOCATION: '4004'
   WORKLOAD_IDENTITY_PROVIDER: ${{ vars.WORKLOAD_IDENTITY_PROVIDER }}
   DEPLOYER_SA: ${{ vars.DEPLOYER_SA }}
+  RUNTIME_SA: ${{ vars.RUNTIME_SA }}
+  SCHED_SA: ${{ vars.SCHED_SA }}
   CRON_EXPR: "1 * * * *" # schedule: at 1 minute past every hour
 
 jobs:
@@ -157,6 +158,7 @@ jobs:
               --oidc-token-audience="${URL}"
 
           fi
+
 
 
 
