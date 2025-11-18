@@ -70,6 +70,7 @@ jobs:
             --gen2 \
             --region="$REGION" \
             --runtime=python311 \
+            --source="${FUNCTION_DIR}" \
             --entry-point=scrape_dwml \
             --trigger-http \
             --service-account="$RUNTIME_SA" \
@@ -158,6 +159,7 @@ jobs:
               --oidc-token-audience="${URL}"
 
           fi
+
 
 
 
