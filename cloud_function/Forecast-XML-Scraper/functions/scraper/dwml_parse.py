@@ -5,6 +5,10 @@ from lxml import etree
 from dateutil import parser as dtparser
 import json
 from typing import Any, List
+import logging
+from json import JSONDecodeError
+
+logger = logging.getLogger(__name__)
 
 def fetch_dwml(url: str, timeout: int = 60) -> requests.Response:
     r = requests.get(url, timeout=timeout)
@@ -163,9 +167,17 @@ def flatten_energy(resp_json: Any, stamp_utc: str, location_id: str) -> pd.DataF
     This function produces columns: `scrape_time_utc`, `begin_date`,
     `location`, `location_id`, `load`.
     """
-    # parse JSON if necessary
+    # parse JSON if necessary. Be tolerant of empty or invalid payloads.
     if isinstance(resp_json, (bytes, str)):
-        j = json.loads(resp_json)
+        text = resp_json.decode() if isinstance(resp_json, bytes) else resp_json
+        if not text or not text.strip():
+            logger.warning("flatten_energy: empty response for location %s at %s", location_id, stamp_utc)
+            return pd.DataFrame(columns=["scrape_time_utc", "begin_date", "location", "location_id", "load"])
+        try:
+            j = json.loads(text)
+        except (JSONDecodeError, ValueError) as e:
+            logger.warning("flatten_energy: invalid JSON payload for location %s at %s: %s", location_id, stamp_utc, e)
+            return pd.DataFrame(columns=["scrape_time_utc", "begin_date", "location", "location_id", "load"])
     else:
         j = resp_json
 
@@ -199,4 +211,5 @@ def flatten_energy(resp_json: Any, stamp_utc: str, location_id: str) -> pd.DataF
     df.sort_values("begin_date", inplace=True)
 
     return df
+
 
