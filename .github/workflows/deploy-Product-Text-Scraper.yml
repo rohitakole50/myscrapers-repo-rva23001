@@ -55,6 +55,7 @@ jobs:
             --region="$REGION" \
             --runtime=python311 \
             --entry-point=scrape_nws_text \
+            --source="." \
             --trigger-http \
             --service-account="$RUNTIME_SA" \
             --no-allow-unauthenticated \
@@ -141,5 +142,6 @@ jobs:
               --oidc-token-audience="${URL}"
 
           fi
+
 
 
