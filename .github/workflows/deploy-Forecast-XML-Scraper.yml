@@ -58,7 +58,6 @@ jobs:
           project_id: ${{ env.PROJECT_ID }}
 
       - name: Deploy Cloud Function (Gen2)
-        working-directory: Forecast-XML-Scraper/functions
         run: |
           set -euo pipefail
           SA_ARGS=()
@@ -159,3 +158,4 @@ jobs:
               --oidc-token-audience="${URL}"
 
           fi
+
