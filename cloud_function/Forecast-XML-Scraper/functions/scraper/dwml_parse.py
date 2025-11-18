@@ -211,5 +211,3 @@ def flatten_energy(resp_json: Any, stamp_utc: str, location_id: str) -> pd.DataF
     df.sort_values("begin_date", inplace=True)
 
     return df
-
-
