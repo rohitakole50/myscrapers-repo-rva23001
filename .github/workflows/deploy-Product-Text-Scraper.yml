@@ -7,49 +7,62 @@ on:
       - 'Product-Text-Scraper/functions/**'
   workflow_dispatch: {}
 
-jobs:
-  deploy:
-    runs-on: ubuntu-latest
-
-    permissions:
+permissions:
       contents: 'read'
       id-token: 'write'
 
-    env:
-      PROJECT_ID: ${{ vars.PROJECT_ID }}
-      REGION: ${{ vars.REGION }}
-      PROJECT_NUMBER: ${{ vars.PROJECT_NUMBER }}
-      FUNCTION_NAME: nws-textminer-fn
-      FUNCTION_DIR: cloud-function/Product-Text-Scraper/functions
-      RUNTIME_SA: ${{ vars.RUNTIME_SA }}
-      DEPLOYER_SA: ${{ vars.DEPLOYER_SA }}
-      SCHED_SA: ${{ vars.SCHED_SA }}
-      BUCKET_NAME: ${{ vars.BUCKET_NAME }}
-      LAT: '42.3601'
-      LON: '-71.0589'
-      # Optional: how far back to backfill by default at runtime
-      BACKFILL_HOURS: '48'
-      SECRET_USER_AGENT: NWS_USER_AGENT:latest
-      WORKLOAD_IDENTITY_PROVIDER: ${{ vars.WORKLOAD_IDENTITY_PROVIDER }}
-      
-      CRON_EXPR: "*/15 * * * *" # schedule: every 15 minutes
+env:
+  PROJECT_ID: ${{ vars.PROJECT_ID }}
+  REGION: ${{ vars.REGION }}
+  PROJECT_NUMBER: ${{ vars.PROJECT_NUMBER }}
+  FUNCTION_NAME: nws-textminer-fn
+  FUNCTION_DIR: cloud-function/Product-Text-Scraper/functions
+  RUNTIME_SA: ${{ vars.RUNTIME_SA }}
+  DEPLOYER_SA: ${{ vars.DEPLOYER_SA }}
+  SCHED_SA: ${{ vars.SCHED_SA }}
+  BUCKET_NAME: ${{ vars.BUCKET_NAME }}
+  LAT: '42.3601'
+  LON: '-71.0589'
+  # Optional: how far back to backfill by default at runtime
+  BACKFILL_HOURS: '48'
+  SECRET_USER_AGENT: NWS_USER_AGENT:latest
+  WORKLOAD_IDENTITY_PROVIDER: ${{ vars.WORKLOAD_IDENTITY_PROVIDER }}
+  
+  CRON_EXPR: "*/15 * * * *" # schedule: every 15 minutes
 
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
 
-      - id: auth
-        name: Auth to GCP via OIDC
+      - name: Auth (WIF)
         uses: google-github-actions/auth@v2
         with:
           workload_identity_provider: ${{ env.WORKLOAD_IDENTITY_PROVIDER }}
           service_account: ${{ env.DEPLOYER_SA }}
-          project_id: ${{ env.PROJECT_ID }}
+          create_credentials_file: true
+          export_environment_variables: true
 
       - name: Setup gcloud
         uses: google-github-actions/setup-gcloud@v2
+        with:
+          project_id: ${{ env.PROJECT_ID }}
 
       - name: Deploy Cloud Function (Gen2)
         run: |
+          set -euo pipefail
+          # Ensure we're in the directory that contains main.py for Python functions
+          if [ -d "Product-Text-Scraper/functions" ]; then
+            cd Product-Text-Scraper/functions
+          elif [ -d "functions" ]; then
+            cd functions
+          else
+            echo "Directory not found: Product-Text-Scraper/functions or functions"
+            echo "Repository root contents:"
+            ls -la
+            exit 1
+          fi
           gcloud functions deploy "$FUNCTION_NAME" \
             --gen2 \
             --region="$REGION" \
@@ -142,6 +155,7 @@ jobs:
               --oidc-token-audience="${URL}"
 
           fi
+
 
 
 
