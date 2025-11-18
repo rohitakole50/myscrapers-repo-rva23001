@@ -7,7 +7,7 @@ import json
 from typing import Any, List
 
 def fetch_dwml(url: str, timeout: int = 60) -> requests.Response:
-    r = requests.get(url, headers=headers, timeout=timeout)
+    r = requests.get(url, timeout=timeout)
     r.raise_for_status()
     return r
 
@@ -199,3 +199,4 @@ def flatten_energy(resp_json: Any, stamp_utc: str, location_id: str) -> pd.DataF
     df.sort_values("begin_date", inplace=True)
 
     return df
+
