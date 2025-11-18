@@ -27,7 +27,6 @@ def _all_product_codes(sess: requests.Session) -> List[str]:
 # Iterate through all products for one type & office, following pagination
 def _iter_products_for_type(
     sess: requests.Session,
-    headers: Dict[str, str],
     product_code: str,
     office: str,
 ) -> Iterable[Dict[str, Any]]:
@@ -36,6 +35,7 @@ def _iter_products_for_type(
     NOTE: Do NOT add ?limit=... (NWS returns 400); follow pagination.next instead.
     """
     url = f"https://api.weather.gov/products/types/{product_code}/locations/{office}"
+    headers = {]
     while url:
         r = sess.get(url, headers=headers, timeout=DEFAULT_TIMEOUT)
         if r.status_code == 400:
@@ -70,7 +70,6 @@ def _save_missing_for_type(
     office: str,
     product: str,
     sess: requests.Session,
-    headers: Dict[str, str],
     since_utc: Optional[datetime] = None,
 ) -> Tuple[int, List[str]]:
     client = storage.Client(project=project_id)
@@ -80,7 +79,7 @@ def _save_missing_for_type(
     saved = 0
     errors: List[str] = []
 
-    for item in _iter_products_for_type(sess, headers, product, office):
+    for item in _iter_products_for_type(sess, product, office):
         try:
             issued_iso = item["issuanceTime"]
             issued_utc = datetime.fromisoformat(issued_iso.replace("Z", "+00:00"))
@@ -92,6 +91,7 @@ def _save_missing_for_type(
             if stamp in existing:
                 continue
 
+            headers = {}
             detail = sess.get(item["@id"], headers=headers, timeout=DEFAULT_TIMEOUT)
             detail.raise_for_status()
             text = detail.json().get("productText", "")
@@ -108,7 +108,8 @@ def _save_missing_for_type(
     return saved, errors
 
 # Resolve lat/lon to NWS office code (e.g. "BOX")
-def _resolve_office(sess: requests.Session, headers: Dict[str, str], lat: float, lon: float) -> str:
+def _resolve_office(sess: requests.Session, lat: float, lon: float) -> str:
+    headers = {}
     r = sess.get(f"https://api.weather.gov/points/{lat},{lon}", headers=headers, timeout=DEFAULT_TIMEOUT)
     r.raise_for_status()
     return r.json()["properties"]["cwa"]  # e.g. "BOX"
@@ -120,7 +121,6 @@ def scrape_missing_versions(
     bucket_name: str,
     lat: float,
     lon: float,
-    user_agent: str,
     products: Optional[List[str]] = None,
     backfill_hours: int = 24,
     all_types: bool = False,
@@ -132,8 +132,7 @@ def scrape_missing_versions(
     - backfill_hours controls how far back to look.
     """
     sess = requests.Session()
-    headers = {"User-Agent": user_agent}
-    office = _resolve_office(sess, headers, lat, lon)
+    office = _resolve_office(sess, lat, lon)
 
     # Decide product list: only fetch ALL codes when explicitly requested.
     if all_types:
@@ -161,7 +160,7 @@ def scrape_missing_versions(
     for code in product_list:
         try:
             s, errs = _save_missing_for_type(
-                project_id, bucket_name, office, code, sess, headers, since_utc=since_utc
+                project_id, bucket_name, office, code, sess, since_utc=since_utc
             )
             total_saved += s
             all_errors.extend(errs)
@@ -179,3 +178,4 @@ def scrape_missing_versions(
         "skipped_types": skipped,   # typically lots of 400s
         "errors": all_errors,
     }
+
