@@ -49,7 +49,6 @@ jobs:
         uses: google-github-actions/setup-gcloud@v2
 
       - name: Deploy Cloud Function (Gen2)
-        working-directory: Product-Text-Scraper/functions
         run: |
           gcloud functions deploy "$FUNCTION_NAME" \
             --gen2 \
@@ -142,3 +141,4 @@ jobs:
               --oidc-token-audience="${URL}"
 
           fi
+
