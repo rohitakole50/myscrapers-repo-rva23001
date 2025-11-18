@@ -77,7 +77,7 @@ jobs:
             --timeout=360s \
             --memory=1Gi \
             --set-env-vars="PROJECT_ID=$PROJECT_ID,GCS_BUCKET=$BUCKET_NAME,RAW_PREFIX=$RAW_PREFIX,CSV_PREFIX=$CSV_PREFIX,LAT=$LAT,LON=$LON,FCST_TYPE=$FCST_TYPE,ENERGY_RAW_PREFIX=$ENERGY_RAW_PREFIX,ENERGY_CSV_PREFIX=$ENERGY_CSV_PREFIX,ENERGY_URL_BASE=$ENERGY_URL_BASE,ENERGY_START_DATE=$ENERGY_START_DATE,ENERGY_LOCATION=$ENERGY_LOCATION" \
-            --set-secrets="USER_AGENT=$SECRET_USER_AGENT,ISO_NE_USER=$SECRET_ISO_USER,ISO_NE_PASS=$SECRET_ISO_PASS"
+            --set-secrets="USER_AGENT=$SECRET_USER_AGENT:latest,ISO_NE_USER=$SECRET_ISO_USER:latest,ISO_NE_PASS=$SECRET_ISO_PASS:latest"
 
       - name: Grant invoker to deployer & runtime SAs
         run: |
@@ -158,5 +158,6 @@ jobs:
               --oidc-token-audience="${URL}"
 
           fi
+
 
 
