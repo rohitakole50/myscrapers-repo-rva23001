@@ -35,7 +35,7 @@ def _iter_products_for_type(
     NOTE: Do NOT add ?limit=... (NWS returns 400); follow pagination.next instead.
     """
     url = f"https://api.weather.gov/products/types/{product_code}/locations/{office}"
-    headers = {]
+    headers = {}
     while url:
         r = sess.get(url, headers=headers, timeout=DEFAULT_TIMEOUT)
         if r.status_code == 400:
@@ -178,4 +178,5 @@ def scrape_missing_versions(
         "skipped_types": skipped,   # typically lots of 400s
         "errors": all_errors,
     }
+
 
