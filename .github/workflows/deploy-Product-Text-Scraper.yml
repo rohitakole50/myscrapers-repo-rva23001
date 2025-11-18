@@ -1,0 +1,143 @@
+name: Deploy - TextScraper (nws-textminer-fn)
+
+on:
+  push:
+    branches: [ main ]
+    paths:
+      - 'Product-Text-Scraper/functions/**'
+  workflow_dispatch:
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+
+    permissions:
+      contents: 'read'
+      id-token: 'write'
+
+    env:
+      PROJECT_ID: ${{ vars.PROJECT_ID }}
+      REGION: ${{ vars.REGION }}
+      PROJECT_NUMBER: ${{ vars.PROJECT_NUMBER }}
+      FUNCTION_NAME: nws-textminer-fn
+      FUNCTION_DIR: cloud-function/Product-Text-Scraper/functions
+      RUNTIME_SA: ${{ vars.RUNTIME_SA }}
+      DEPLOYER_SA: ${{ vars.DEPLOYER_SA }}
+      SCHED_SA: ${{ vars.SCHED_SA }}
+      BUCKET_NAME: ${{ vars.BUCKET_NAME }}
+      LAT: '42.3601'
+      LON: '-71.0589'
+      # Optional: how far back to backfill by default at runtime
+      BACKFILL_HOURS: '48'
+      SECRET_USER_AGENT: NWS_USER_AGENT:latest
+      WORKLOAD_IDENTITY_PROVIDER: ${{ vars.WORKLOAD_IDENTITY_PROVIDER }}
+      
+      CRON_EXPR: "*/15 * * * *" # schedule: every 15 minutes
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - id: auth
+        name: Auth to GCP via OIDC
+        uses: google-github-actions/auth@v2
+        with:
+          workload_identity_provider: ${{ env.WORKLOAD_IDENTITY_PROVIDER }}
+          service_account: ${{ env.DEPLOYER_SA }}
+          project_id: ${{ env.PROJECT_ID }}
+
+      - name: Setup gcloud
+        uses: google-github-actions/setup-gcloud@v2
+
+      - name: Deploy Cloud Function (Gen2)
+        working-directory: Product-Text-Scraper/functions
+        run: |
+          gcloud functions deploy "$FUNCTION_NAME" \
+            --gen2 \
+            --region="$REGION" \
+            --runtime=python311 \
+            --entry-point=scrape_nws_text \
+            --trigger-http \
+            --service-account="$RUNTIME_SA" \
+            --no-allow-unauthenticated \
+            --timeout=300s \
+            --memory=512Mi \
+            --set-env-vars="PROJECT_ID=$PROJECT_ID,GCS_BUCKET=$GCS_BUCKET,LAT=$LAT,LON=$LON,BACKFILL_HOURS=$BACKFILL_HOURS"
+        
+      - name: Grant invoker to deployer & runtime SAs
+        run: |
+          gcloud functions add-invoker-policy-binding "${FUNCTION_NAME}" \
+            --gen2 --region "${REGION}" \
+            --member="serviceAccount:${DEPLOYER_SA}"
+          gcloud functions add-invoker-policy-binding "${FUNCTION_NAME}" \
+            --gen2 --region "${REGION}" \
+            --member="serviceAccount:${RUNTIME_SA}"
+      
+      - name: Get Function URL
+        id: cfurl
+        run: |
+          URL=$(gcloud functions describe "${FUNCTION_NAME}" --gen2 --region "${REGION}" --format='value(serviceConfig.uri)')
+          echo "url=${URL}" >> "$GITHUB_OUTPUT"
+
+      - name: Ensure Scheduler API enabled
+        run: |
+          set -euo pipefail
+          gcloud services list --enabled --filter="cloudscheduler.googleapis.com" --format="value(config.name)" | grep -q cloudscheduler.googleapis.com \
+            || gcloud services enable cloudscheduler.googleapis.com
+
+      - name: Bootstrap IAM for Scheduler OIDC (runtime SA)
+        run: |
+          set -euo pipefail
+          if [[ -z "${RUNTIME_SA:-}" ]]; then
+            echo "RUNTIME_SA is empty; set repo var RUNTIME_SA to your runtime service account."; exit 1
+          fi
+          PROJECT_NUMBER="$(gcloud projects describe "${PROJECT_ID}" --format='value(projectNumber)')"
+          SCHED_AGENT="${SCHED_SA}"
+          echo "Scheduler agent: ${SCHED_AGENT}"
+
+          # 1) Let Scheduler mint OIDC tokens as the RUNTIME_SA
+          gcloud iam service-accounts add-iam-policy-binding "${RUNTIME_SA}" \
+            --member="serviceAccount:${SCHED_AGENT}" \
+            --role="roles/iam.serviceAccountTokenCreator" || {
+              echo "::error::Permission denied adding tokenCreator to ${RUNTIME_SA}. Run (once as project owner):"
+              echo "gcloud iam service-accounts add-iam-policy-binding \"${RUNTIME_SA}\" --member=\"serviceAccount:${SCHED_AGENT}\" --role=\"roles/iam.serviceAccountTokenCreator\""
+              exit 1
+            }
+      
+          # 2) Allow the deployer SA to 'actAs' the RUNTIME_SA when creating the job
+          gcloud iam service-accounts add-iam-policy-binding "${RUNTIME_SA}" \
+            --member="serviceAccount:${DEPLOYER_SA}" \
+            --role="roles/iam.serviceAccountUser" || {
+              echo "::error::Permission denied adding ServiceAccountUser for ${DEPLOYER_SA} on ${RUNTIME_SA}. Run:"
+              echo "gcloud iam service-accounts add-iam-policy-binding \"${RUNTIME_SA}\" --member=\"serviceAccount:${DEPLOYER_SA}\" --role=\"roles/iam.serviceAccountUser\""
+              exit 1
+            }
+
+      - name: Create/Update Cloud Scheduler job (:00 ET, uses runtime SA OIDC)
+        shell: bash
+        run: |
+          set -euo pipefail
+          JOB_NAME="${FUNCTION_NAME}-hourly"
+          URL="${{ steps.cfurl.outputs.url }}"
+          [[ -z "${URL}" ]] && { echo "Function URL empty"; exit 1; }
+
+          if gcloud scheduler jobs describe "$JOB_NAME" --location="${REGION}" >/dev/null 2>&1; then
+            gcloud scheduler jobs update http "$JOB_NAME" \
+              --location="${REGION}" \
+              --schedule="${CRON_EXPR}" \
+              --time-zone="America/New_York" \
+              --uri="${URL}" \
+              --http-method=POST \
+              --message-body='${{ env.SCHEDULE_BODY }}' \
+              --oidc-service-account-email="${RUNTIME_SA}" \
+              --oidc-token-audience="${URL}"
+          else
+            gcloud scheduler jobs create http "$JOB_NAME" \
+              --location="${REGION}" \
+              --schedule="${CRON_EXPR}" \
+              --time-zone="America/New_York" \
+              --uri="${URL}" \
+              --http-method=POST \
+              --message-body='${{ env.SCHEDULE_BODY }}' \
+              --oidc-service-account-email="${RUNTIME_SA}" \
+              --oidc-token-audience="${URL}"
+          fi
