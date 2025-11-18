@@ -6,7 +6,7 @@ from .dwml_parse import fetch_dwml, flatten_dwml, fetch_energy, flatten_energy
 class Pipeline:
     def __init__(self, *, project_id: str, bucket_name: str,
                  raw_prefix: str, csv_prefix: str,
-                 lat: float, lon: float, fcst_url: str, user_agent: str):
+                 lat: float, lon: float, fcst_url: str):
         self.project_id = project_id
         self.bucket_name = bucket_name
         self.raw_prefix = raw_prefix
@@ -14,8 +14,6 @@ class Pipeline:
         self.lat = lat
         self.lon = lon
         self.fcst_url = fcst_url
-        self.user_agent = user_agent
-
         self.storage = storage.Client(project=project_id)
         self.bucket = self.storage.bucket(bucket_name)
 
@@ -23,7 +21,7 @@ class Pipeline:
         stamp = dt.datetime.utcnow().strftime("%Y%m%dT%H%M%SZ")
 
         # 1) fetch and save raw
-        resp = fetch_dwml(self.fcst_url, self.user_agent)
+        resp = fetch_dwml(self.fcst_url)
         raw_name = f"{self.raw_prefix}dwml_{stamp}.xml"
         self.bucket.blob(raw_name).upload_from_string(resp.text, content_type="application/xml")
 
@@ -67,7 +65,7 @@ class Pipeline:
 
             # fetch with Basic Auth if provided
             try:
-                resp = fetch_energy(day_url, self.user_agent, iso_user=iso_user, iso_pass=iso_pass)
+                resp = fetch_energy(day_url, iso_user=iso_user, iso_pass=iso_pass)
             except Exception as e:
                 day_results[day_str] = {"error": f"fetch_failed: {e}", "url": day_url}
                 cur = cur + dt.timedelta(days=1)
@@ -116,4 +114,5 @@ class Pipeline:
             "days_requested": total_days,
             "total_rows": total_rows,
             "per_day": day_results,
+
         }
