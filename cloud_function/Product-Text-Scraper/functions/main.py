@@ -12,7 +12,6 @@ def scrape_nws_text(request: Request):
     bucket = os.getenv("GCS_BUCKET", "")
     lat = float(os.getenv("LAT", "42.3601"))
     lon = float(os.getenv("LON", "-71.0589"))
-    user_agent = os.getenv("USER_AGENT", "")
     default_hours = int(os.getenv("BACKFILL_HOURS", "24"))
 
     # Defaults
@@ -46,7 +45,6 @@ def scrape_nws_text(request: Request):
             bucket_name=bucket,
             lat=lat,
             lon=lon,
-            user_agent=user_agent,
             products=products,
             backfill_hours=hours,
             all_types=all_types,
@@ -55,4 +53,5 @@ def scrape_nws_text(request: Request):
     except Exception as e:
         # Make failures visible in logs/Scheduler
         err = {"error": str(e)}
+
         return (json.dumps(err), 500, {"Content-Type": "application/json"})
