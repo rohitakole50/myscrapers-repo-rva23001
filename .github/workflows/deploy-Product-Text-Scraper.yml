@@ -60,7 +60,7 @@ jobs:
             --no-allow-unauthenticated \
             --timeout=300s \
             --memory=512Mi \
-            --set-env-vars="PROJECT_ID=$PROJECT_ID,GCS_BUCKET=$GCS_BUCKET,LAT=$LAT,LON=$LON,BACKFILL_HOURS=$BACKFILL_HOURS"
+            --set-env-vars="PROJECT_ID=$PROJECT_ID,GCS_BUCKET=$BUCKET_NAME,LAT=$LAT,LON=$LON,BACKFILL_HOURS=$BACKFILL_HOURS"
         
       - name: Grant invoker to deployer & runtime SAs
         run: |
@@ -141,4 +141,5 @@ jobs:
               --oidc-token-audience="${URL}"
 
           fi
+
 
