@@ -2,6 +2,10 @@
 import pandas as pd
 from google.cloud import storage
 from .dwml_parse import fetch_dwml, flatten_dwml, fetch_energy, flatten_energy
+import logging
+
+logger = logging.getLogger(__name__)
+logger.setLevel(logging.INFO)
 
 class Pipeline:
     def __init__(self, *, project_id: str, bucket_name: str,
@@ -65,7 +69,9 @@ class Pipeline:
 
             # fetch with Basic Auth if provided
             try:
+                logger.info("Fetching energy URL: %s (date=%s)", day_url, day_str)
                 resp = fetch_energy(day_url, iso_user=iso_user, iso_pass=iso_pass)
+                logger.info("Fetched energy for %s: status=%s, len=%d", day_str, getattr(resp, 'status_code', None), len(resp.text or ""))
             except Exception as e:
                 day_results[day_str] = {"error": f"fetch_failed: {e}", "url": day_url}
                 cur = cur + dt.timedelta(days=1)
@@ -76,6 +82,7 @@ class Pipeline:
             try:
                 self.bucket.blob(raw_name).upload_from_string(resp.text, content_type="application/json")
                 raw_gs = f"gs://{self.bucket_name}/{raw_name}"
+                logger.info("Uploaded raw energy JSON to %s", raw_gs)
             except Exception as e:
                 day_results[day_str] = {"error": f"upload_raw_failed: {e}", "raw_name": raw_name}
                 cur = cur + dt.timedelta(days=1)
@@ -85,7 +92,9 @@ class Pipeline:
             # flatten
             try:
                 df = flatten_energy(resp.json(), stamp, location)
+                logger.info("Flattened energy for %s: rows=%d", day_str, len(df))
             except Exception as e:
+                logger.exception("flatten_failed for %s", day_str)
                 day_results[day_str] = {"error": f"flatten_failed: {e}", "day": day_str}
                 cur = cur + dt.timedelta(days=1)
                 total_days += 1
@@ -96,7 +105,9 @@ class Pipeline:
             try:
                 self.bucket.blob(per_run).upload_from_string(buf.getvalue(), content_type="text/csv")
                 csv_gs = f"gs://{self.bucket_name}/{per_run}"
+                logger.info("Uploaded energy CSV to %s (rows=%d)", csv_gs, len(df))
             except Exception as e:
+                logger.exception("upload_csv_failed for %s", day_str)
                 day_results[day_str] = {"error": f"upload_csv_failed: {e}", "per_run": per_run}
                 cur = cur + dt.timedelta(days=1)
                 total_days += 1
@@ -116,3 +127,4 @@ class Pipeline:
             "per_day": day_results,
 
         }
+
