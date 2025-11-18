@@ -6,8 +6,7 @@ from dateutil import parser as dtparser
 import json
 from typing import Any, List
 
-def fetch_dwml(url: str, user_agent: str, timeout: int = 60) -> requests.Response:
-    headers = {"User-Agent": user_agent}
+def fetch_dwml(url: str, timeout: int = 60) -> requests.Response:
     r = requests.get(url, headers=headers, timeout=timeout)
     r.raise_for_status()
     return r
@@ -126,11 +125,10 @@ def flatten_dwml(resp_bytes: bytes, stamp_utc: str, lat: float, lon: float) -> p
     return df
 
 
-def fetch_energy(url: str, user_agent: str, iso_user: str = None, iso_pass: str = None, timeout: int = 60) -> requests.Response:
+def fetch_energy(url: str, iso_user: str = None, iso_pass: str = None, timeout: int = 60) -> requests.Response:
     """Fetch a per-day energy JSON from ISO-NE using HTTP Basic Auth when provided."""
-    headers = {"User-Agent": user_agent} if user_agent else {}
     auth = (iso_user, iso_pass) if iso_user and iso_pass else None
-    r = requests.get(url, headers=headers, auth=auth, timeout=timeout)
+    r = requests.get(url, auth=auth, timeout=timeout)
     r.raise_for_status()
     return r
 
@@ -199,4 +197,5 @@ def flatten_energy(resp_json: Any, stamp_utc: str, location_id: str) -> pd.DataF
         return pd.DataFrame(columns=["scrape_time_utc", "begin_date", "location", "location_id", "load"])
     df = pd.DataFrame(rows)
     df.sort_values("begin_date", inplace=True)
+
     return df
