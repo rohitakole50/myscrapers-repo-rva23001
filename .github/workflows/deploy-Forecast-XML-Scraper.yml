@@ -66,12 +66,12 @@ jobs:
             SA_ARGS=(--service-account="${RUNTIME_SA}")
           fi
             # Try to change into the functions directory; provide diagnostics if missing
-            if [ -d "Forecast-XML-Scraper/functions" ]; then
-              cd Forecast-XML-Scraper/functions
+            if [ -d "cloud_function/Forecast-XML-Scraper/functions" ]; then
+              cd cloud_function/Forecast-XML-Scraper/functions
             elif [ -d "functions" ]; then
               cd functions
             else
-              echo "Directory not found: Forecast-XML-Scraper/functions or functions"
+              echo "Directory not found: cloud_function/Forecast-XML-Scraper/functions or functions"
               echo "Repository root contents:"
               ls -la
               exit 1
@@ -192,6 +192,7 @@ jobs:
               --oidc-token-audience="${URL}"
 
           fi
+
 
 
 
