@@ -120,6 +120,13 @@ class Pipeline:
                 else:
                     master_df = pd.DataFrame(columns=["scrape_time_utc", "begin_date", "location", "location_id", "load"])
                     logger.info("No existing master CSV found; will create new one")
+                    # Ensure an empty master CSV exists so users see the flattened path in GCS
+                    try:
+                        buf_init = io.StringIO(); master_df.to_csv(buf_init, index=False)
+                        self.bucket.blob(master_name).upload_from_string(buf_init.getvalue(), content_type="text/csv")
+                        logger.info("Initialized empty master CSV at gs://%s/%s", self.bucket_name, master_name)
+                    except Exception:
+                        logger.exception("failed to write initial empty master CSV")
 
                 # normalize key columns for dedupe
                 master_keys = set()
@@ -170,6 +177,7 @@ class Pipeline:
             "per_day": day_results,
 
         }
+
 
 
 
