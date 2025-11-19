@@ -79,11 +79,15 @@ class Pipeline:
                 total_days += 1
                 continue
 
-            raw_name = f"{raw_prefix}energy_{day_str}_{stamp}.json"
+            raw_name = f"{raw_prefix}energy_{day_str}.json"
+            raw_blob = self.bucket.blob(raw_name)
+            raw_gs = f"gs://{self.bucket_name}/{raw_name}"
             try:
-                self.bucket.blob(raw_name).upload_from_string(resp.text, content_type="application/json")
-                raw_gs = f"gs://{self.bucket_name}/{raw_name}"
-                logger.info("Uploaded raw energy JSON to %s", raw_gs)
+                if raw_blob.exists():
+                    logger.info("Raw energy JSON already exists at %s; skipping upload", raw_gs)
+                else:
+                    raw_blob.upload_from_string(resp.text, content_type="application/json")
+                    logger.info("Uploaded raw energy JSON to %s", raw_gs)
             except Exception as e:
                 day_results[day_str] = {"error": f"upload_raw_failed: {e}", "raw_name": raw_name}
                 cur = cur + dt.timedelta(days=1)
@@ -178,6 +182,7 @@ class Pipeline:
             "per_day": day_results,
 
         }
+
 
 
 
