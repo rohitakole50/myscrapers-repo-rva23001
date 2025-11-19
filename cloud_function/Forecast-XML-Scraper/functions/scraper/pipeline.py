@@ -101,20 +101,62 @@ class Pipeline:
                 total_days += 1
                 continue
 
-            per_run = f"{csv_prefix}energy_flat_{day_str}_{stamp}.csv"
-            buf = io.StringIO(); df.to_csv(buf, index=False)
+            # Append new rows into a single master CSV instead of per-day CSVs.
+            master_name = f"{csv_prefix}energy_master.csv"
+            master_blob = self.bucket.blob(master_name)
             try:
-                self.bucket.blob(per_run).upload_from_string(buf.getvalue(), content_type="text/csv")
-                csv_gs = f"gs://{self.bucket_name}/{per_run}"
-                logger.info("Uploaded energy CSV to %s (rows=%d)", csv_gs, len(df))
+                if master_blob.exists():
+                    txt = master_blob.download_as_text()
+                    try:
+                        master_df = pd.read_csv(io.StringIO(txt), parse_dates=["begin_date", "scrape_time_utc"]) 
+                    except Exception:
+                        # fallback: read without parsing, then coerce
+                        master_df = pd.read_csv(io.StringIO(txt))
+                        if "begin_date" in master_df.columns:
+                            master_df["begin_date"] = pd.to_datetime(master_df["begin_date"], utc=True, errors="coerce")
+                        if "scrape_time_utc" in master_df.columns:
+                            master_df["scrape_time_utc"] = pd.to_datetime(master_df["scrape_time_utc"], utc=True, errors="coerce")
+                    logger.info("Loaded existing master CSV with %d rows", len(master_df))
+                else:
+                    master_df = pd.DataFrame(columns=["scrape_time_utc", "begin_date", "location", "location_id", "load"])
+                    logger.info("No existing master CSV found; will create new one")
+
+                # normalize key columns for dedupe
+                master_keys = set()
+                if not master_df.empty:
+                    master_df["begin_date"] = pd.to_datetime(master_df["begin_date"], utc=True, errors="coerce")
+                    master_df["location_id"] = master_df["location_id"].astype(str)
+                    master_keys = set(zip(master_df["begin_date"].astype(str), master_df["location_id"]))
+
+                # prepare incoming rows
+                df["begin_date"] = pd.to_datetime(df["begin_date"], utc=True, errors="coerce")
+                df["location_id"] = df["location_id"].astype(str)
+                incoming_keys = list(zip(df["begin_date"].astype(str), df["location_id"]))
+                mask_new = [k not in master_keys for k in incoming_keys]
+                new_rows = df[mask_new]
+
+                if new_rows.empty:
+                    logger.info("No new rows to append for %s", day_str)
+                    day_results[day_str] = {"raw_json": raw_gs, "rows_this_run": 0, "skipped": "no_new_rows"}
+                else:
+                    # append and write back
+                    updated = pd.concat([master_df, new_rows], ignore_index=True)
+                    # optional: sort by begin_date
+                    if "begin_date" in updated.columns:
+                        updated["begin_date"] = pd.to_datetime(updated["begin_date"], utc=True, errors="coerce")
+                        updated.sort_values("begin_date", inplace=True)
+                    buf2 = io.StringIO(); updated.to_csv(buf2, index=False)
+                    self.bucket.blob(master_name).upload_from_string(buf2.getvalue(), content_type="text/csv")
+                    master_gs = f"gs://{self.bucket_name}/{master_name}"
+                    logger.info("Appended %d new rows to master CSV %s (total %d)", len(new_rows), master_gs, len(updated))
+                    day_results[day_str] = {"raw_json": raw_gs, "master_csv": master_gs, "rows_this_run": len(new_rows)}
             except Exception as e:
-                logger.exception("upload_csv_failed for %s", day_str)
-                day_results[day_str] = {"error": f"upload_csv_failed: {e}", "per_run": per_run}
+                logger.exception("master_update_failed for %s", day_str)
+                day_results[day_str] = {"error": f"master_update_failed: {e}", "day": day_str}
                 cur = cur + dt.timedelta(days=1)
                 total_days += 1
                 continue
 
-            day_results[day_str] = {"raw_json": raw_gs, "per_run_csv": csv_gs, "rows_this_run": len(df)}
             total_rows += len(df)
             total_days += 1
             cur = cur + dt.timedelta(days=1)
@@ -128,5 +170,6 @@ class Pipeline:
             "per_day": day_results,
 
         }
+
 
 
