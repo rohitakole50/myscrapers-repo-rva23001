@@ -57,7 +57,8 @@ class Pipeline:
         except Exception as e:
             return {"error": f"bad_start_date: {e}", "start_date": start_date}
 
-        end_dt = dt.datetime.utcnow().date()
+        # Use yesterday as the end date — current-day payloads may not be available yet
+        end_dt = (dt.datetime.utcnow().date() - dt.timedelta(days=1))
         day_results = {}
         total_rows = 0
         total_days = 0
@@ -177,6 +178,7 @@ class Pipeline:
             "per_day": day_results,
 
         }
+
 
 
 
