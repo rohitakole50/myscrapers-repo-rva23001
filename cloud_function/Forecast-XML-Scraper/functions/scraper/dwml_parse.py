@@ -176,8 +176,42 @@ def flatten_energy(resp_json: Any, stamp_utc: str, location_id: str) -> pd.DataF
         try:
             j = json.loads(text)
         except (JSONDecodeError, ValueError) as e:
-            logger.warning("flatten_energy: invalid JSON payload for location %s at %s: %s", location_id, stamp_utc, e)
-            return pd.DataFrame(columns=["scrape_time_utc", "begin_date", "location", "location_id", "load"])
+            # Not JSON — try parsing as XML (ISO-NE sometimes returns XML payloads)
+            try:
+                root = etree.fromstring(text.encode("utf-8"))
+                # find all HourlyRtDemand elements regardless of namespace
+                nodes = root.xpath('.//*[local-name()="HourlyRtDemand"]')
+                rows = []
+                for node in nodes:
+                    bd = node.xpath('.//*[local-name()="BeginDate"]/text()')
+                    begin = bd[0] if bd else None
+                    loc_node = node.xpath('.//*[local-name()="Location"]')
+                    if loc_node:
+                        loc_elem = loc_node[0]
+                        loc_id = loc_elem.get('LocId') or loc_elem.get('LocID') or location_id
+                        loc_name = (loc_elem.text or "").strip()
+                    else:
+                        loc_id = location_id
+                        loc_name = ""
+                    load_val = node.xpath('.//*[local-name()="Load"]/text()')
+                    load = load_val[0] if load_val else None
+                    rows.append({
+                        "scrape_time_utc": pd.Timestamp(stamp_utc),
+                        "begin_date": pd.to_datetime(begin, utc=True) if begin else pd.NaT,
+                        "location": loc_name,
+                        "location_id": loc_id,
+                        "load": pd.to_numeric(load, errors="coerce"),
+                    })
+                if not rows:
+                    logger.warning("flatten_energy: invalid JSON payload and no XML HourlyRtDemand nodes for location %s at %s: %s", location_id, stamp_utc, e)
+                    return pd.DataFrame(columns=["scrape_time_utc", "begin_date", "location", "location_id", "load"])
+                df_xml = pd.DataFrame(rows)
+                df_xml.sort_values("begin_date", inplace=True)
+                logger.info("flatten_energy: parsed XML payload with %d rows for location %s at %s", len(df_xml), location_id, stamp_utc)
+                return df_xml
+            except Exception:
+                logger.warning("flatten_energy: invalid JSON payload for location %s at %s: %s", location_id, stamp_utc, e)
+                return pd.DataFrame(columns=["scrape_time_utc", "begin_date", "location", "location_id", "load"])
     else:
         j = resp_json
 
@@ -211,3 +245,4 @@ def flatten_energy(resp_json: Any, stamp_utc: str, location_id: str) -> pd.DataF
     df.sort_values("begin_date", inplace=True)
 
     return df
+
