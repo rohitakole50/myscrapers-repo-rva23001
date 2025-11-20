@@ -79,29 +79,46 @@ class Pipeline:
                 total_days += 1
                 continue
 
-            raw_name = f"{raw_prefix}energy_{day_str}.json"
-            raw_blob = self.bucket.blob(raw_name)
-            raw_gs = f"gs://{self.bucket_name}/{raw_name}"
+            # flatten first; only proceed if there's data
             try:
-                if raw_blob.exists():
-                    logger.info("Raw energy JSON already exists at %s; skipping upload", raw_gs)
-                else:
-                    raw_blob.upload_from_string(resp.text, content_type="application/json")
-                    logger.info("Uploaded raw energy JSON to %s", raw_gs)
-            except Exception as e:
-                day_results[day_str] = {"error": f"upload_raw_failed: {e}", "raw_name": raw_name}
-                cur = cur + dt.timedelta(days=1)
-                total_days += 1
-                continue
-
-            # flatten
-            try:
-                # pass raw text to flatten_energy; let it handle empty/invalid JSON
                 df = flatten_energy(resp.text, stamp, location)
                 logger.info("Flattened energy for %s: rows=%d", day_str, len(df))
             except Exception as e:
                 logger.exception("flatten_failed for %s", day_str)
                 day_results[day_str] = {"error": f"flatten_failed: {e}", "day": day_str}
+                cur = cur + dt.timedelta(days=1)
+                total_days += 1
+                continue
+
+            if df.empty:
+                logger.info("No data in payload for %s; skipping raw upload and master update", day_str)
+                day_results[day_str] = {"skipped": "no_data", "rows_this_run": 0}
+                cur = cur + dt.timedelta(days=1)
+                total_days += 1
+                continue
+
+            # Only save raw JSON if payload contains data. If an existing raw file already
+            # contains data for this day, do not overwrite it; otherwise upload/overwrite.
+            raw_name = f"{raw_prefix}energy_{day_str}.json"
+            raw_blob = self.bucket.blob(raw_name)
+            raw_gs = f"gs://{self.bucket_name}/{raw_name}"
+            try:
+                if raw_blob.exists():
+                    try:
+                        existing_txt = raw_blob.download_as_text()
+                        existing_df = flatten_energy(existing_txt, stamp, location)
+                    except Exception:
+                        existing_df = pd.DataFrame()
+                    if not existing_df.empty:
+                        logger.info("Existing raw energy JSON already has data at %s; skipping overwrite", raw_gs)
+                    else:
+                        raw_blob.upload_from_string(resp.text, content_type="application/json")
+                        logger.info("Uploaded raw energy JSON to %s (overwrote empty file)", raw_gs)
+                else:
+                    raw_blob.upload_from_string(resp.text, content_type="application/json")
+                    logger.info("Uploaded raw energy JSON to %s", raw_gs)
+            except Exception as e:
+                day_results[day_str] = {"error": f"upload_raw_failed: {e}", "raw_name": raw_name}
                 cur = cur + dt.timedelta(days=1)
                 total_days += 1
                 continue
@@ -182,6 +199,7 @@ class Pipeline:
             "per_day": day_results,
 
         }
+
 
 
 
